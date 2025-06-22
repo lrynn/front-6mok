@@ -3,7 +3,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { useEffect, useState } from "react";
 
-
 export interface Stone {
   team: number;
   order: number;
@@ -12,11 +11,13 @@ export type Board = Stone[][];
 
 let roomNumber: number = 0;
 
+const url = `http://localhost:8000/games/${roomNumber}`;
+
 function initBoard() {
   const [board, setBoard] = useState<Board>([]);
 
   useEffect(() => {
-    fetch(`http://localhost:8000/games/${roomNumber}/get/all`)
+    fetch(`${url}/get/all`)
       .then((r) => r.json())
       .then((data: Board) => setBoard(data));
   }, []);
@@ -28,7 +29,7 @@ async function setStone([x, y]: [number, number]) {
   const params = { x, y };
 
   try {
-    const res = await fetch(`http://localhost:8000/games/${roomNumber}/set`, {
+    const res = await fetch(`${url}/set`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
