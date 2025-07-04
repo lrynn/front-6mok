@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-
 export interface Stone {
   team: number;
   order: number;
@@ -10,18 +9,14 @@ export interface Stone {
 
 export type Board = Stone[][];
 
-let roomId: string = '0';
 let boardSize: number = 19;
-
-const url = `http://localhost:8000/games/${roomId}`;
-
 
 /*
   initBoard()
   보드를 초기화합니다.
 */
 
-function useInitBoard() {
+function initBoard(roomId: string | null) {
   const [board, setBoard] = useState<Board>(
     () =>
       Array.from({ length: boardSize }, () =>
@@ -30,42 +25,65 @@ function useInitBoard() {
   );
 
   useEffect(() => {
-    fetch(`${url}/get-all`)
+    if (!roomId) return;
+    fetch(`http://localhost:8000/games/${roomId}/status-all`)
       .then((r) => r.json())
       .then((data: Board) => setBoard(data));
-  }, []);
+  }, [roomId]);
 
   return [board, setBoard] as const;
 }
 
 /*
   useSpectate(room_id)
-  SSE 연결을 제공합니다.
+  WebSocket 연결을 통해 게임 상태 업데이트를 수신합니다.
 */
-interface SseData {
-  type: string;
-  stone: Stone;
-  axis: [number, number];
+interface WebSocketMessage {
+  type: 'set' | 'chat' | 'user_joined' | 'user_left';
+  payload: any;
 }
-function useSpectate(setBoard: React.Dispatch<React.SetStateAction<Board>>, roomId: string) {
-  useEffect(() => {
-    const es = new EventSource(
-      `${url}/sse`
-    );
 
-    es.onmessage = (ev) => {
-      console.log('Raw SSE data:', ev.data);
-      const data = JSON.parse(ev.data) as SseData;
-      if (data.type === 'set') {
-        setBoard(prevBoard => {
-          const newBoard = prevBoard.map(row => row.map(stone => ({ ...stone })));
-          newBoard[data.axis[0]][data.axis[1]] = data.stone;
-          return newBoard;
-        });
+function useSpectate(setBoard: React.Dispatch<React.SetStateAction<Board>>, roomId: string | null) {
+  useEffect(() => {
+    if (!roomId) return;
+    // 실제 accountId는 인증 시스템 등에서 가져와야 합니다.
+    const accountId = `user_${Math.random().toString(36).substring(7)}`;
+    const ws = new WebSocket(`ws://localhost:8000/ws/${roomId}/${accountId}`);
+
+    ws.onmessage = (event) => {
+      try {
+        const message: WebSocketMessage = JSON.parse(event.data);
+        
+        if (message.type === 'set') {
+          const { axis, stone } = message.payload;
+          setBoard(prevBoard => {
+            // board 불변성 유지를 위해 깊은 복사
+            const newBoard = prevBoard.map(row => row.map(s => ({ ...s })));
+            newBoard[axis[0]][axis[1]] = stone;
+            return newBoard;
+          });
+        }
+      } catch (error) {
+        console.error("Failed to parse or process WebSocket message:", error);
       }
     };
 
-    return () => es.close();
+    ws.onopen = () => {
+      console.log(`WebSocket connection established for room ${roomId}`);
+    };
+
+    ws.onclose = (event) => {
+      console.log('WebSocket connection closed:', event.reason);
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    // 컴포넌트 언마운트 시 WebSocket 연결을 정리합니다.
+    return () => {
+      ws.close();
+    };
   }, [roomId, setBoard]);
 }
 
@@ -73,11 +91,12 @@ function useSpectate(setBoard: React.Dispatch<React.SetStateAction<Board>>, room
   setStone([x, y])
   지정된 좌표에 돌을 두겠다는 요청을 서버에 전송합니다.
 */
-async function setStone([y, x]: [number, number]) {
+async function setStone([y, x]: [number, number], roomId: string | null) {
+  if (!roomId) return;
   const params = { y, x };
 
   try {
-    const res = await fetch(`${url}/set`, {
+    const res = await fetch(`http://localhost:8000/games/${roomId}/set`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -99,8 +118,8 @@ async function setStone([y, x]: [number, number]) {
   }
 }
 
-export default function Game() {
-  const [board, setBoard] = useInitBoard();
+export default function GameClient({ roomId }: { roomId: string }) {
+  const [board, setBoard] = initBoard(roomId);
   useSpectate(setBoard, roomId);
 
   const cellSize: number = 40; // px per cell
@@ -122,6 +141,10 @@ export default function Game() {
     }
   };
 
+  if (!roomId) {
+    return <div>Room ID not found.</div>;
+  }
+
   return (
     <div
       style={{
@@ -135,7 +158,7 @@ export default function Game() {
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={() => {
-        if (hover) setStone([hover.y, hover.x]);
+        if (hover) setStone([hover.y, hover.x], roomId);
       }}
     >
       {/* Render grid lines */}
