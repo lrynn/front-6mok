@@ -18,6 +18,7 @@ interface RoomDetailInfo {
   game: {
     boardSize: number;
     teamSize: number;
+    isStarted: boolean;
   };
 }
 
@@ -100,11 +101,12 @@ export default function RoomsPage() {
             if (!res.ok) {
               throw new Error(`Failed to fetch info for room ${room.id}`);
             }
-            return res.json();
+            return res.json().then(data => ({ ...data, id: room.id }));
           })
         );
         
         const detailedRoomsData = await Promise.all(roomDetailPromises);
+        console.log(detailedRoomsData);
         setDisplayedRooms(detailedRoomsData);
 
       } catch (error) {
@@ -142,16 +144,25 @@ export default function RoomsPage() {
                 key={room.id} 
                 className="p-4 border rounded-md hover:bg-gray-100 flex justify-between items-center"
               >
-                <Link href={`/rooms/${room.id}`} className="w-full">
-                  <span className="text-lg font-semibold">{room.name}</span>
-                  <span className="text-sm text-gray-600 px-3">{`Room #${room.id}`}</span>
-                  <div className="text-sm text-gray-600">
-                    <span>참여 인원: {room.participants} / {room.game.teamSize * 2}</span>
-                    <span className={`ml-4 font-bold ${room.is_started ? 'text-red-500' : 'text-green-500'}`}>
-                      {room.is_started ? '게임 중' : '대기 중'}
-                    </span>
+                {!room.game.isStarted ? (
+                  <Link href={`/rooms/${room.id}`} className="w-full">
+                    <span className="text-lg font-semibold">{room.name}</span>
+                    <span className="text-sm text-gray-600 px-3">{`Room #${room.id}`}</span>
+                    <div className="text-sm text-gray-600">
+                      <span>참여 인원: {room.participants} / {room.game.teamSize * 2}</span>
+                      <span className={'ml-4 font-bold text-green-500'}>대기 중</span>
+                    </div>
+                  </Link>
+                ) : (
+                  <div className="w-full">
+                    <span className="text-lg font-semibold">{room.name}</span>
+                    <span className="text-sm text-gray-600 px-3">{`Room #${room.id}`}</span>
+                    <div className="text-sm text-gray-600">
+                      <span>참여 인원: {room.participants} / {room.game.teamSize * 2}</span>
+                      <span className={'ml-4 font-bold text-red-500'}>게임 중</span>
+                    </div>
                   </div>
-                </Link>
+                )}
               </li>
             ))}
           </ul>

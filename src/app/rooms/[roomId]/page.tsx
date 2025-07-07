@@ -1,3 +1,5 @@
+
+
 interface RoomDetailPageProps {
   params: {
     roomId: string;
